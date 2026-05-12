@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* En la v4 todo se maneja nativamente en CSS */
+body {
+  background-color: #020617; /* slate-950 */
+  color: #f8fafc; /* Texto claro por defecto */
+}
