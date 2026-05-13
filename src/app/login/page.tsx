@@ -22,13 +22,23 @@ export default function LoginPage() {
         password,
       });
 
-      if (error) throw error;
+      // 🔥 AQUÍ AGREGAMOS EL LOG PARA VER EL ERROR REAL EN LA CONSOLA (F12)
+      if (error) {
+        console.error("==== ERROR DETALLADO DE SUPABASE ====");
+        console.error("Status:", error.status);
+        console.error("Mensaje:", error.message);
+        console.error("Objeto completo:", error);
+        throw error;
+      }
 
       toast.success('Acceso autorizado. Bienvenido.');
-      router.push('/'); // Redirigimos al Dashboard
+      
+      // Sincronizar el estado del servidor antes de redirigir
+      router.refresh();
+      router.push('/'); 
     } catch (error: any) {
-      console.error(error);
-      toast.error('Credenciales incorrectas. Intenta de nuevo.');
+      // Ahora el toast mostrará el error real que nos manda el servidor
+      toast.error(`Error: ${error.message || 'Fallo de conexión'}`);
     } finally {
       setCargando(false);
     }
@@ -44,7 +54,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-black text-white tracking-tight">Tracto<span className="text-blue-500">-disel</span></h1>
-            <p className="text-sm font-medium text-slate-400 mt-1">Panel de Administración B2B</p>
+            <p className="text-sm font-medium text-slate-400 mt-1">Sistema de Administración B2B</p>
           </div>
         </div>
 
@@ -60,7 +70,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-12 pr-4 text-white outline-none focus:border-blue-500 transition-colors"
-                placeholder="admin@tractodisel.com"
+                placeholder="tu@correo.com"
               />
             </div>
           </div>
@@ -89,8 +99,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs font-medium text-slate-600 mt-8">
-          Sistema de Acceso Restringido.
+        <p className="text-center text-[10px] font-black text-slate-700 mt-8 uppercase tracking-widest">
+          Acceso Restringido - Tracto-disel Veracruz
         </p>
       </div>
     </div>

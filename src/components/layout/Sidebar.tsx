@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -10,16 +10,17 @@ import {
   Users, 
   Undo2, 
   History, 
-  ShieldCheck, // Icono para la gestión de personal
+  ShieldCheck, 
   LogOut 
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter(); // Instanciamos el router para poder redirigir
   const [rol, setRol] = useState<string | null>(null);
 
-  // Consultamos el rol del usuario al cargar el componente
   useEffect(() => {
     const obtenerRol = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -36,7 +37,6 @@ export default function Sidebar() {
     obtenerRol();
   }, []);
 
-  // Definición de todos los items posibles
   const allItems = [
     { icon: <LayoutDashboard size={20} />, label: 'Dashboard', href: '/' },
     { icon: <ShoppingCart size={20} />, label: 'Punto de Venta', href: '/punto-venta' },
@@ -44,15 +44,27 @@ export default function Sidebar() {
     { icon: <Users size={20} />, label: 'Clientes', href: '/clientes' },
     { icon: <History size={20} />, label: 'Historial', href: '/historial' },
     { icon: <Undo2 size={20} />, label: 'Devoluciones', href: '/devoluciones' },
-    // Esta es la nueva pestaña protegida
     { icon: <ShieldCheck size={20} />, label: 'Personal', href: '/usuarios', adminOnly: true },
   ];
 
-  // Filtramos los items: si es adminOnly y el rol no es Admin, se oculta
   const menuItems = allItems.filter(item => {
     if (item.adminOnly && rol !== 'Admin') return false;
     return true;
   });
+
+  // 🔥 FUNCIÓN PARA CERRAR SESIÓN
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast.success('Sesión cerrada correctamente');
+      
+      // Refrescamos el estado del servidor y mandamos al login
+      router.refresh();
+      router.push('/login');
+    } catch (error) {
+      toast.error('Hubo un error al cerrar sesión');
+    }
+  };
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-full hidden md:flex">
@@ -87,7 +99,7 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-slate-800">
         <button 
-          onClick={async () => await supabase.auth.signOut()}
+          onClick={handleLogout}
           className="flex items-center gap-3 px-4 py-3 w-full text-left text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-bold group"
         >
           <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
