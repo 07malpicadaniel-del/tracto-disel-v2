@@ -1,4 +1,4 @@
-import { Edit, Trash2, UserX } from 'lucide-react';
+import { Edit, Trash2, UserX, Wallet } from 'lucide-react';
 
 export interface Cliente {
   id: string;
@@ -13,9 +13,10 @@ interface ClientesTableProps {
   cargando: boolean;
   onEliminar: (id: string) => void;
   onEditar: (cliente: Cliente) => void;
+  onAbonar: (cliente: Cliente) => void;
 }
 
-export default function ClientesTable({ clientes, cargando, onEliminar, onEditar }: ClientesTableProps) {
+export default function ClientesTable({ clientes, cargando, onEliminar, onEditar, onAbonar }: ClientesTableProps) {
   return (
     <div className="flex-1 bg-slate-900 border border-slate-800 rounded-3xl shadow-sm overflow-hidden flex flex-col">
       <div className="overflow-x-auto">
@@ -74,13 +75,23 @@ export default function ClientesTable({ clientes, cargando, onEliminar, onEditar
                     <td className="p-4">
                       <div className="flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
+                          onClick={() => onAbonar(cliente)}
+                          disabled={cliente.deuda_actual <= 0}
+                          title="Registrar Abono"
+                          className="p-2 bg-slate-800 hover:bg-green-600 disabled:opacity-30 disabled:hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                        >
+                          <Wallet size={16} />
+                        </button>
+                        <button 
                           onClick={() => onEditar(cliente)}
+                          title="Editar Cliente"
                           className="p-2 bg-slate-800 hover:bg-blue-600 text-slate-400 hover:text-white rounded-lg transition-colors"
                         >
                           <Edit size={16} />
                         </button>
                         <button 
                           onClick={() => onEliminar(cliente.id)}
+                          title="Eliminar Cliente"
                           className="p-2 bg-slate-800 hover:bg-red-600 text-slate-400 hover:text-white rounded-lg transition-colors"
                         >
                           <Trash2 size={16} />

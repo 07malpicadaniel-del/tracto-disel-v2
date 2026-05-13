@@ -1,101 +1,138 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react'; // Agregamos useRef para la impresión
+import { useReactToPrint } from 'react-to-print'; // Hook para manejar la impresora
+import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
+
+// Componentes UI
 import CatalogoPOS, { Producto } from '../../components/ui/CatalogoPOS';
 import TicketPOS, { ItemCarrito } from '../../components/ui/TicketPOS';
+import SeleccionarClienteModal, { ClienteMinimo } from '../../components/ui/SeleccionarClienteModal';
+import TicketImprimible from '../../components/ui/TicketImprimible'; // Componente del ticket físico
 
 export default function PuntoVentaPage() {
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [cargandoPago, setCargandoPago] = useState(false);
+  const [modalClientesAbierto, setModalClientesAbierto] = useState(false);
+  
+  // Estado para guardar la información que se va a imprimir
+  const [datosUltimaVenta, setDatosUltimaVenta] = useState<any>(null);
+  
+  // Referencia al componente invisible de impresión
+  const componenteRef = useRef<HTMLDivElement>(null);
+
+  // Configuración del motor de impresión
+  const handlePrint = useReactToPrint({
+    contentRef: componenteRef,
+    documentTitle: "Ticket_TractoDisel",
+  });
 
   const handleAgregar = (producto: Producto) => {
     setCarrito(prev => {
       const existe = prev.find(item => item.id === producto.id);
-      if (existe) {
-        return prev.map(item => item.id === producto.id ? { ...item, cantidad_venta: item.cantidad_venta + 1 } : item);
-      }
+      if (existe) return prev.map(item => item.id === producto.id ? { ...item, cantidad_venta: item.cantidad_venta + 1 } : item);
       return [...prev, { ...producto, cantidad_venta: 1 }];
     });
   };
 
   const handleActualizarCantidad = (id: string, nuevaCantidad: string) => {
-    if (nuevaCantidad === '') {
-      setCarrito(prev => prev.map(item => item.id === id ? { ...item, cantidad_venta: 0 } : item));
-      return;
-    }
+    if (nuevaCantidad === '') return setCarrito(prev => prev.map(item => item.id === id ? { ...item, cantidad_venta: 0 } : item));
     const cantidadFloat = parseFloat(nuevaCantidad);
     if (isNaN(cantidadFloat) || cantidadFloat < 0) return;
     setCarrito(prev => prev.map(item => item.id === id ? { ...item, cantidad_venta: cantidadFloat } : item));
   };
 
-  const handleEliminar = (id: string) => {
-    setCarrito(prev => prev.filter(item => item.id !== id));
-  };
+  const handleEliminar = (id: string) => setCarrito(prev => prev.filter(item => item.id !== id));
 
-  // EL MOTOR DE COBRO
-  const handleCobrar = async (metodoPago: 'Efectivo' | 'Crédito') => {
-    if (carrito.length === 0) return;
-    
-    // Filtramos para evitar cobrar items con cantidad 0
+  // EVALUADOR INICIAL DEL BOTÓN DE COBRO
+  const iniciarCobro = (metodoPago: 'Efectivo' | 'Crédito') => {
     const itemsValidos = carrito.filter(item => item.cantidad_venta > 0);
     if (itemsValidos.length === 0) {
-      alert("No hay cantidades válidas en el ticket.");
+      toast.error("No hay cantidades válidas en el ticket.");
       return;
     }
 
     if (metodoPago === 'Crédito') {
-      // Dejamos un aviso porque pronto conectaremos el modal de clientes aquí
-      alert("Aviso: Actualmente la venta a Crédito se registrará como venta libre. Pronto conectaremos el selector de Clientes.");
+      setModalClientesAbierto(true);
+    } else {
+      procesarTransaccion('Efectivo');
     }
+  };
 
+  // EL MOTOR DE TRANSACCIÓN MAESTRO
+  const procesarTransaccion = async (metodoPago: 'Efectivo' | 'Crédito', cliente?: ClienteMinimo) => {
+    setModalClientesAbierto(false);
     setCargandoPago(true);
 
-    try {
-      // Calculamos el gran total
-      const totalVenta = itemsValidos.reduce((acc, item) => acc + (item.precio_publico * item.cantidad_venta), 0);
+    const itemsValidos = carrito.filter(item => item.cantidad_venta > 0);
+    const totalVenta = itemsValidos.reduce((acc, item) => acc + (item.precio_publico * item.cantidad_venta), 0);
 
-      // PASO 1: Crear la Venta Maestra
+    try {
+      // 1. Crear Venta
       const { data: ventaData, error: ventaError } = await supabase
         .from('ventas')
-        .insert([{ total: totalVenta, metodo_pago: metodoPago }])
-        .select('id')
-        .single(); // Pedimos que nos devuelva el ID recién creado
+        .insert([{ 
+          total: totalVenta, 
+          metodo_pago: metodoPago,
+          cliente_id: cliente ? cliente.id : null
+        }])
+        .select('id').single();
 
       if (ventaError) throw ventaError;
-      const ventaId = ventaData.id;
 
-      // PASO 2: Preparar e insertar los detalles (Partidas del ticket)
+      // 2. Insertar Detalle
       const detallesInsert = itemsValidos.map(item => ({
-        venta_id: ventaId,
-        producto_id: item.id,
+        venta_id: ventaData.id, 
+        producto_id: item.id, 
         cantidad: item.cantidad_venta,
-        precio_unitario: item.precio_publico,
+        precio_unitario: item.precio_publico, 
         subtotal: item.precio_publico * item.cantidad_venta
       }));
-
       const { error: detallesError } = await supabase.from('detalle_ventas').insert(detallesInsert);
       if (detallesError) throw detallesError;
 
-      // PASO 3: Descontar el Stock del Inventario
+      // 3. Descontar Stock
       for (const item of itemsValidos) {
-        const nuevoStock = item.stock - item.cantidad_venta;
-        await supabase
-          .from('productos')
-          .update({ stock: nuevoStock })
-          .eq('id', item.id);
+        await supabase.from('productos').update({ stock: item.stock - item.cantidad_venta }).eq('id', item.id);
       }
 
-      // ÉXITO: Limpiamos y avisamos
-      alert(`✅ ¡Cobro exitoso por $${totalVenta.toFixed(2)} en ${metodoPago}!`);
-      setCarrito([]); // Vaciamos el carrito
+      // 4. Si fue crédito, sumarle la deuda al cliente
+      if (metodoPago === 'Crédito' && cliente) {
+        await supabase
+          .from('clientes')
+          .update({ deuda_actual: cliente.deuda_actual + totalVenta })
+          .eq('id', cliente.id);
+      }
 
-      // Pequeño hack para forzar al componente del catálogo a recargarse y mostrar el nuevo stock
-      window.location.reload(); 
+      // 5. Preparar datos para el ticket físico ANTES de limpiar el carrito
+      setDatosUltimaVenta({
+        id: ventaData.id,
+        total: totalVenta,
+        metodo_pago: metodoPago,
+        items: [...itemsValidos],
+        cliente: cliente?.nombre
+      });
+
+      // 6. Toast de éxito
+      toast.success(
+        `Venta por $${totalVenta.toFixed(2)} exitosa. Preparando ticket...`
+      );
+      
+      // 7. Disparar impresión y limpieza
+      setTimeout(() => {
+        handlePrint(); // Abre la ventana de impresión
+        setCarrito([]);
+        
+        // Esperamos un poco más para que la tabla se refresque visualmente tras la impresión
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }, 800);
 
     } catch (error) {
-      console.error("Error crítico al procesar cobro:", error);
-      alert("Ocurrió un error al intentar cobrar. Revisa tu consola.");
+      console.error("Error transaccional:", error);
+      toast.error("Ocurrió un error al procesar la transacción.");
     } finally {
       setCargandoPago(false);
     }
@@ -110,8 +147,21 @@ export default function PuntoVentaPage() {
         cargandoPago={cargandoPago}
         onActualizarCantidad={handleActualizarCantidad} 
         onEliminar={handleEliminar}
-        onCobrar={handleCobrar} 
+        onCobrar={iniciarCobro} 
       />
+      
+      <SeleccionarClienteModal 
+        isOpen={modalClientesAbierto}
+        onClose={() => setModalClientesAbierto(false)}
+        onClienteSeleccionado={(cliente) => procesarTransaccion('Crédito', cliente)}
+      />
+
+      {/* Componente oculto que se activa solo al imprimir */}
+      {datosUltimaVenta && (
+        <div style={{ display: 'none' }}>
+           <TicketImprimible ref={componenteRef} venta={datosUltimaVenta} />
+        </div>
+      )}
     </div>
   );
 }
