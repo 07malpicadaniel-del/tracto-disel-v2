@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // 🔥 Permitimos que Next.js acepte conexiones desde la IP de tu Arch Linux
-  allowedDevOrigins: ['192.168.100.46'],
+  // Vercel gestionará los orígenes de forma segura automáticamente
 };
 
 export default nextConfig;
